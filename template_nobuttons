@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: transparent;
+      touch-action: pan-y pinch-zoom;
+      overflow: hidden;
+    }
+
+    .zinz-container {
+      max-width: 600px;
+      height: 100vh;
+      margin: 0 auto;
+      background: transparent;
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .zinz-viewer {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+    }
+
+    .zinz-title {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      z-index: 3;
+      background-color: rgba(0, 0, 0, 0.5);
+      padding: 5px 10px;
+      border-radius: 4px;
+    }
+
+    .zinz-progress {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      padding: 8px;
+      gap: 4px;
+      z-index: 2;
+    }
+
+    .progress-bar {
+      height: 2px;
+      background: rgba(255, 255, 255, 0.35);
+      flex-grow: 1;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      width: 0;
+      height: 100%;
+      background: white;
+      border-radius: 2px;
+      animation: progressAnimation 5s linear forwards;
+    }
+
+    @keyframes progressAnimation {
+      from { width: 0; }
+      to { width: 100%; }
+    }
+
+    .zinz-track {
+      position: absolute;
+      top: 0;
+      left: 0;
+      display: flex;
+      height: 100%;
+      transition: transform 0.3s ease-out;
+    }
+
+    .zinz-content {
+      position: relative;
+      min-width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform: scale(0.8);
+      transition: transform 0.3s ease;
+      opacity: 0.5;
+    }
+
+    .zinz-content.active {
+      transform: scale(1);
+      opacity: 1;
+    }
+
+    .zinz-image {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .navigation-buttons {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      transform: translateY(-50%);
+      display: flex;
+      justify-content: space-between;
+      padding: 0 16px;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    .nav-button {
+      width: 40px;
+      height: 40px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.5);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.3s ease;
+      pointer-events: auto;
+      backdrop-filter: blur(4px);
+    }
+
+    .nav-button:hover {
+      background-color: rgba(0, 0, 0, 0.7);
+    }
+
+    .nav-button svg {
+      width: 24px;
+      height: 24px;
+      fill: white;
+    }
+
+    .zinz-overlay {
+      position: absolute;
+      bottom: 50px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      z-index: 3;
+    }
+
+    .zinz-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: rgba(255, 255, 255, 0.35);
+      transition: background-color 0.3s ease;
+    }
+
+    .zinz-dot.active {
+      background-color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="zinz-container">
+    <div class="zinz-viewer" id="zinzViewer">
+      <div class="zinz-title">{{TITLE}}</div>
+
+      <div class="zinz-progress">
+        <!-- Progress bars will be dynamically generated based on number of items -->
+        <div class="progress-bar">
+          <div class="progress-bar-fill"></div>
+        </div>
+      </div>
+
+      <div class="zinz-track" id="zinzTrack">
+        <!-- Template for a single zinz item -->
+        <div class="zinz-content">
+          <img src="{{IMAGE_URL}}" alt="{{IMAGE_ALT}}" class="zinz-image">
+        </div>
+      </div>
+
+      <div class="navigation-buttons">
+        <button class="nav-button prev-button">
+          <svg viewBox="0 0 24 24">
+            <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+          </svg>
+        </button>
+        <button class="nav-button next-button">
+          <svg viewBox="0 0 24 24">
+            <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="zinz-overlay">
+        <!-- Dots will be dynamically generated based on number of items -->
+        <div class="zinz-dot"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const zinzTrack = document.getElementById('zinzTrack');
+      const zinzItems = Array.from(document.querySelectorAll('.zinz-content'));
+      const progressBars = Array.from(document.querySelectorAll('.progress-bar'));
+      const dots = Array.from(document.querySelectorAll('.zinz-dot'));
+
+      let currentZinzIndex = 0;
+      let timer;
+
+      function showZinz(index) {
+        currentZinzIndex = index;
+        if (currentZinzIndex >= zinzItems.length) currentZinzIndex = 0;
+        if (currentZinzIndex < 0) currentZinzIndex = zinzItems.length - 1;
+
+        zinzItems.forEach((zinz, i) => {
+          zinz.classList.toggle('active', i === currentZinzIndex);
+          dots[i].classList.toggle('active', i === currentZinzIndex);
+        });
+        zinzTrack.style.transform = `translateX(${-currentZinzIndex * 100}%)`;
+
+        progressBars.forEach((bar, i) => {
+          const fill = bar.querySelector('.progress-bar-fill');
+          fill.style.animation = 'none';
+          fill.offsetHeight;
+          if (i < currentZinzIndex) fill.style.width = '100%';
+          else if (i === currentZinzIndex) fill.style.animation = 'progressAnimation 5s linear forwards';
+          else fill.style.width = '0';
+        });
+
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          showZinz(currentZinzIndex + 1);
+        }, 5000);
+      }
+
+      showZinz(0);
+
+      document.querySelector('.next-button').addEventListener('click', () => {
+        showZinz(currentZinzIndex + 1);
+      });
+
+      document.querySelector('.prev-button').addEventListener('click', () => {
+        showZinz(currentZinzIndex - 1);
+      });
+    });
+  </script>
+</body>
+</html>
