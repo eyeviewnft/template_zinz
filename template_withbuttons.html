@@ -165,6 +165,13 @@
       background-color: white;
     }
 
+    .copy-input {
+      position: absolute;
+      left: -9999px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
     .bottom-link {
       position: absolute;
       bottom: 70px;
@@ -178,14 +185,55 @@
       border-radius: 6px;
       text-decoration: none;
       text-align: center;
-      transition: background-color 0.3s ease;
+      transition: all 0.3s ease;
       z-index: 4;
       backdrop-filter: blur(4px);
+      cursor: pointer;
+      border: none;
+      outline: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 100px;
+      justify-content: center;
     }
 
-    .bottom-link:hover {
+    .bottom-link:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+
+    .bottom-link:hover:not(:disabled) {
       background-color: rgba(0, 0, 0, 0.7);
     }
+
+    .bottom-link.copied {
+      background-color: rgba(16, 185, 129, 0.7);
+    }
+
+    .success-message {
+      display: inline-flex;
+      align-items: center;
+      color: white;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      font-size: 16px;
+    }
+
+    .success-message.visible {
+      opacity: 1;
+    }
+
+    @keyframes copyPulse {
+      0% { transform: translateX(-50%) scale(1); }
+      50% { transform: translateX(-50%) scale(1.05); }
+      100% { transform: translateX(-50%) scale(1); }
+    }
+
+    .bottom-link.animate {
+      animation: copyPulse 0.3s ease;
+    }
+
   </style>
 </head>
 <body>
@@ -225,59 +273,150 @@
         <div class="zinz-dot"></div>
       </div>
 
-      <a href="#" target="_blank" class="bottom-link" id="dynamicLink">{{BUTTON_TEXT}}</a>
+      <input type="text" class="copy-input" readonly>
+      <button class="bottom-link" id="copyButton">
+        Copy link
+        <span class="success-message" id="successMessage"></span>
+      </button>
     </div>
   </div>
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      const zinzTrack = document.getElementById('zinzTrack');
-      const zinzItems = Array.from(document.querySelectorAll('.zinz-content'));
+      const storiesTrack = document.getElementById('storiesTrack');
+      const stories = Array.from(document.querySelectorAll('.story-content'));
       const progressBars = Array.from(document.querySelectorAll('.progress-bar'));
-      const dots = Array.from(document.querySelectorAll('.zinz-dot'));
-      const dynamicLink = document.getElementById('dynamicLink');
-
-      let currentZinzIndex = 0;
+      const dots = Array.from(document.querySelectorAll('.story-dot'));
+      const copyButton = document.getElementById('copyButton');
+      const copyInput = document.querySelector('.copy-input');
+      const successMessage = document.getElementById('successMessage');
+      
+      let currentStoryIndex = 0;
       let timer;
+      let copyTimeout;
 
-      function showZinz(index) {
-        currentZinzIndex = index;
-        if (currentZinzIndex >= zinzItems.length) currentZinzIndex = 0;
-        if (currentZinzIndex < 0) currentZinzIndex = zinzItems.length - 1;
+      function showStory(index) {
+        currentStoryIndex = index;
+        if (currentStoryIndex >= stories.length) currentStoryIndex = 0;
+        if (currentStoryIndex < 0) currentStoryIndex = stories.length - 1;
 
-        zinzItems.forEach((zinz, i) => {
-          zinz.classList.toggle('active', i === currentZinzIndex);
-          dots[i].classList.toggle('active', i === currentZinzIndex);
+        stories.forEach((story, i) => {
+          story.classList.toggle('active', i === currentStoryIndex);
+          dots[i].classList.toggle('active', i === currentStoryIndex);
         });
-        zinzTrack.style.transform = `translateX(${-currentZinzIndex * 100}%)`;
+        storiesTrack.style.transform = `translateX(${-currentStoryIndex * 100}%)`;
 
-        const activeZinz = zinzItems[currentZinzIndex];
-        dynamicLink.href = activeZinz.getAttribute('data-link');
-        dynamicLink.textContent = activeZinz.getAttribute('data-text');
+        // Reset copy button state when changing stories
+        resetCopyButton();
 
+        const activeStory = stories[currentStoryIndex];
+        const link = activeStory.getAttribute('data-link');
+        copyInput.value = link;
+        copyButton.dataset.link = link;
+
+        // Update progress bars (keeping existing logic)
+        updateProgressBars();
+      }
+
+      function updateProgressBars() {
         progressBars.forEach((bar, i) => {
           const fill = bar.querySelector('.progress-bar-fill');
           fill.style.animation = 'none';
           fill.offsetHeight;
-          if (i < currentZinzIndex) fill.style.width = '100%';
-          else if (i === currentZinzIndex) fill.style.animation = 'progressAnimation 5s linear forwards';
+          if (i < currentStoryIndex) fill.style.width = '100%';
+          else if (i === currentStoryIndex) fill.style.animation = 'progressAnimation 5s linear forwards';
           else fill.style.width = '0';
         });
 
         clearTimeout(timer);
         timer = setTimeout(() => {
-          showZinz(currentZinzIndex + 1);
+          showStory(currentStoryIndex + 1);
         }, 5000);
       }
 
-      showZinz(0);
+      function resetCopyButton() {
+        copyButton.textContent = 'Copy link';
+        copyButton.classList.remove('copied');
+        successMessage.classList.remove('visible');
+        clearTimeout(copyTimeout);
+      }
+
+      async function copyToClipboard() {
+        const link = copyInput.value;
+        copyButton.disabled = true;
+
+        try {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(link);
+            showSuccess();
+          } else {
+            fallbackCopyToClipboard();
+          }
+        } catch (err) {
+          fallbackCopyToClipboard();
+        }
+
+        copyButton.disabled = false;
+      }
+
+      function fallbackCopyToClipboard() {
+        try {
+          // Make input temporarily visible
+          const originalStyle = copyInput.style.all;
+          copyInput.style.position = 'fixed';
+          copyInput.style.top = '0';
+          copyInput.style.clip = 'rect(0, 0, 0, 0)';
+          copyInput.style.whiteSpace = 'pre';
+          copyInput.style.webkitUserSelect = 'text';
+          copyInput.style.userSelect = 'text';
+
+          copyInput.select();
+          copyInput.setSelectionRange(0, 99999);
+
+          const successful = document.execCommand('copy');
+          
+          // Restore input style
+          copyInput.style.all = originalStyle;
+
+          if (successful) {
+            showSuccess();
+          }
+        } catch (err) {
+          console.error('Fallback copy failed:', err);
+        }
+
+        // Deselect
+        window.getSelection().removeAllRanges();
+      }
+
+      function showSuccess() {
+        copyButton.textContent = 'Copied! ';
+        copyButton.appendChild(successMessage);
+        copyButton.classList.add('copied', 'animate');
+        successMessage.classList.add('visible');
+        
+        // Remove animation class after it completes
+        setTimeout(() => {
+          copyButton.classList.remove('animate');
+        }, 300);
+
+        // Reset button state after 2 seconds
+        clearTimeout(copyTimeout);
+        copyTimeout = setTimeout(resetCopyButton, 2000);
+      }
+
+      // Initialize the first story
+      showStory(0);
+
+      // Event Listeners
+      copyButton.addEventListener('click', copyToClipboard);
 
       document.querySelector('.next-button').addEventListener('click', () => {
-        showZinz(currentZinzIndex + 1);
+        showStory(currentStoryIndex + 1);
       });
 
       document.querySelector('.prev-button').addEventListener('click', () => {
-        showZinz(currentZinzIndex - 1);
+        showStory(currentStoryIndex - 1);
       });
     });
   </script>
